@@ -1,2 +1,2 @@
-This file is conflict free! 
-It's impossible for it to have a merge conflict.
+This file is not conflict free! 
+It is possible for it to have a merge conflict.
