@@ -3,7 +3,7 @@
 
 # Cognitive-Modeling-2024
 
-> Team members: Ken'dor Wilson, Matthew Merritt
+> Team members: Kend'or Wilson, Matthew Merritt
 
 ## Repository Description:
 A team repository for the COGS 4210 course at RPI.
