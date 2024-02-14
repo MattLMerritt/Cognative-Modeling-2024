@@ -1,0 +1,2 @@
+This file could be conflict free! 
+It's impossible for it to have a merge conflict?

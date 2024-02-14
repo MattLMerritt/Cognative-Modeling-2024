@@ -1,0 +1,14 @@
+# run: conda env create --file environment.yml
+name: cognitive
+dependencies:
+  - python == 3.11
+  - pip
+  - pip:
+    - matplotlib >= 3.8.2
+    - numpy >= 1.26.3
+    - numba >= 0.58.1
+    - seaborn >= 0.13.0
+    - scipy >= 1.11.4
+    - ipython >= 8.18.1
+    - notebook >= 7.0.6
+    - tensorflow >= 2.15.0
