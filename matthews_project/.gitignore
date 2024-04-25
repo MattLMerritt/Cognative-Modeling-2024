@@ -1,0 +1,5 @@
+# preserve original (unmodified) adult dataset
+!datasets/
+
+datasets/*
+!datasets/adult_dataset
