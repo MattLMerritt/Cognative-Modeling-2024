@@ -265,3 +265,57 @@ def generateAUPRCGraph(auprc_values, epochs, noise_scale=0.1):
     plt.grid(True)
     plt.show()
     return f
+
+def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataloader, loss_fn=nn.BCELoss()):
+    """Evaluate the model based on the input test dataloader.
+
+    Parameters:
+    -----------
+    client_models : list[nn.Module]
+        A list of client models to evaluate.
+    fusion_model : nn.Module
+        The fusion model to evaluate.
+    party_paritions : list[int]
+        The number of features per party.
+    test_dataloader : DataLoader
+        The data loader that contains the test data.
+    loss_fn : Loss Function
+        The loss function to use for evaluation.
+
+    Returns:
+    --------
+    x : float
+        The average loss over the test data.
+    """
+
+    losses = []
+    all_labels = []
+    all_predictions = []
+
+    for client_data_batch, batch_labels in test_dataloader:
+
+        # re-construct batch data per party
+        client_data_batched_per_party = torch.split(client_data_batch, party_paritions, dim=1)
+        
+        # Independent Forward Pass
+        client_outputs = []
+        for i in range(len(party_paritions)):
+            client_outputs.append(client_models[i](client_data_batched_per_party[i]))
+        
+        # Fusion Forward Pass
+        predictions = fusion_model(torch.cat(client_outputs, dim=1))
+        
+        # Calculate Loss
+        loss = loss_fn(predictions, batch_labels)
+        losses.append(loss.item())
+        
+        # Store labels and predictions for metrics calculation
+        all_labels.extend(batch_labels.detach().cpu().numpy())
+        all_predictions.extend(predictions.detach().cpu().numpy())
+    
+    # Metrics calculation
+    avg_loss = sum(losses) / len(test_dataloader)
+    auprc = average_precision_score(all_labels, all_predictions)
+    
+    print(f"Loss: {avg_loss}, AUPRC: {auprc}")
+    return avg_loss, auprc
