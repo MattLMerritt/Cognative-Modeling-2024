@@ -1,10 +1,22 @@
 
+# Libraries for Data Handling
+import numpy as np
+import pandas as pd
+from torch.utils.data import DataLoader, TensorDataset
+from pathlib import Path
+
+# Libraries for Algorithms
 import torch
 import torch.nn as nn
-from sklearn.metrics import average_precision_score
-from torch.utils.data import DataLoader, TensorDataset
+import torch.optim as optim
+from sklearn.metrics import average_precision_score, accuracy_score
+import helper
+
+# Libraries for Data Visulation Tools
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
 
 class ClientModel(nn.Module):
     def __init__(self, n_features, embeding_output_size, layers=1):
@@ -87,7 +99,7 @@ def generateFusionModel(n_embeding_components):
     return FusionModel(n_embeding_components)
 
 
-def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader, client_optimizers=None, fusion_optimizer=None, loss_fn=nn.BCELoss(), epochs=10):
+def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader, client_optimizers=None, fusion_optimizer=None, loss_fn=nn.BCEWithLogitsLoss(), epochs=10):
     """Train the clients and fusion model without adding noise to dataloader.
 
     Parameters:
@@ -180,7 +192,7 @@ def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader
     return (losses, epo, auprc_values)
 
 
-def generateNoisyDataloader(dataset_tensors, noise_scale=0.1, multi_tensors=True, batch_size=32, shuffle=True):
+def generateNoisyDataloader(dataset_tensors, label_tensor, noise_scale=0.1, batch_size=32, shuffle=True):
     """Generate a noisy dataloader based on the input dataset tensors.
 
     Parameters:
@@ -200,21 +212,14 @@ def generateNoisyDataloader(dataset_tensors, noise_scale=0.1, multi_tensors=True
         A dataloader containing the noisy dataset.
     """
 
-    if(multi_tensors):
-        noisy_tensors = []
-        for tensor in dataset_tensors:
-            noisy_tensor = tensor + noise_scale * torch.randn_like(tensor)
-            noisy_tensors.append(noisy_tensor)
-        dataset = TensorDataset(*noisy_tensors)
-    else:
-        noisy_tensor = dataset_tensors + noise_scale * torch.randn_like(dataset_tensors)
-        dataset = TensorDataset(noisy_tensor)
-
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    concated_tensor = torch.cat(dataset_tensors, dim=1)
+    noisy_tensor = concated_tensor + noise_scale * torch.randn_like(concated_tensor)
+    noisy_dataset = TensorDataset(noisy_tensor, label_tensor)
+    dataloader = DataLoader(noisy_dataset, batch_size=batch_size, shuffle=shuffle)
     return dataloader
 
 
-def generateLossGraph(losses, epochs, noise_scale=0.1):
+def generateLossGraph(losses, epochs, n_distinct_parties, noise_scale=0.1, trained_with_noise=False):
     """Generate a loss graph based on the input losses and epochs.
 
     Parameters:
@@ -223,6 +228,10 @@ def generateLossGraph(losses, epochs, noise_scale=0.1):
         A list of losses to plot.
     epochs : list[int]
         A list of epochs to plot.
+    n_distinct_parties : int
+        The number of distinct parties in the dataset.
+    trained_with_noise : bool
+        Whether the model was trained with noise.
 
     Returns:
     --------
@@ -233,14 +242,15 @@ def generateLossGraph(losses, epochs, noise_scale=0.1):
     f, ax = plt.subplots(1, 1, figsize=(10, 5))
     sns.despine(ax=ax)
     ax.plot(epochs, losses, marker='o', linestyle='-')
-    plt.title(f'Loss vs. Epoch (Noise Scale: {noise_scale})')
+    plt.title(f'Loss vs. Epoch (Noise Scale: {noise_scale})' + (' (Trained with Noise)' if trained_with_noise else '') )
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.grid(True)
+    plt.savefig(f"results/adult_{n_distinct_parties}p/loss_{noise_scale}.png")
     plt.show()
     return f
 
-def generateAUPRCGraph(auprc_values, epochs, noise_scale=0.1):
+def generateAUPRCGraph(auprc_values, epochs, n_distinct_parties, noise_scale=0.1, trained_with_noise=False):
     """Generate an AUPRC graph based on the input AUPRC values and epochs.
 
     Parameters:
@@ -249,6 +259,10 @@ def generateAUPRCGraph(auprc_values, epochs, noise_scale=0.1):
         A list of AUPRC values to plot.
     epochs : list[int]
         A list of epochs to plot.
+    n_distinct_parties : int
+        The number of distinct parties in the dataset.
+    trained_with_noise : bool
+        Whether the model was trained with noise.
 
     Returns:
     --------
@@ -259,10 +273,11 @@ def generateAUPRCGraph(auprc_values, epochs, noise_scale=0.1):
     f, ax = plt.subplots(1, 1, figsize=(10, 5))
     sns.despine(ax=ax)
     ax.plot(epochs, auprc_values, marker='o', linestyle='-')
-    plt.title(f'AUPRC vs. Epoch (Noise Scale: {noise_scale})')
+    plt.title(f'AUPRC vs. Epoch (Noise Scale: {noise_scale})' + (' (Trained with Noise)' if trained_with_noise else '') )
     plt.xlabel('Epoch')
     plt.ylabel('AUPRC')
     plt.grid(True)
+    plt.savefig(f"results/adult_{n_distinct_parties}p/auprc_{noise_scale}.png")
     plt.show()
     return f
 
@@ -288,7 +303,9 @@ def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataload
         The average loss over the test data.
     """
 
+    threshold = 0.5
     losses = []
+    all_test_binary_predictions = []
     all_labels = []
     all_predictions = []
 
@@ -304,6 +321,8 @@ def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataload
         
         # Fusion Forward Pass
         predictions = fusion_model(torch.cat(client_outputs, dim=1))
+        binary_predictions = (predictions.sigmoid().detach().cpu().numpy() > threshold).astype(int).flatten()
+        all_test_binary_predictions = np.concatenate((all_test_binary_predictions, binary_predictions))
         
         # Calculate Loss
         loss = loss_fn(predictions, batch_labels)
@@ -318,4 +337,215 @@ def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataload
     auprc = average_precision_score(all_labels, all_predictions)
     
     print(f"Loss: {avg_loss}, AUPRC: {auprc}")
+
+    # generate the confusion matrix
+    conf_matrix = confusion_matrix(all_labels, all_test_binary_predictions)
+
+    # Plotting the confusion matrix using matplotlib
+    fig, ax = plt.subplots()
+    cax = ax.matshow(conf_matrix, cmap=plt.cm.Blues)
+    fig.colorbar(cax)
+
+    for (i, j), val in np.ndenumerate(conf_matrix):
+        ax.text(j, i, f'{val}', ha='center', va='center', color='red')
+
+    ax.set_title('Confusion Matrix')
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('Actual')
+
+    # Adjust the ticks to show the corresponding labels
+    ax.set_xticks(range(len(np.unique(all_labels))))
+    ax.set_yticks(range(len(np.unique(all_labels))))
+    ax.set_xticklabels(np.unique(all_labels))
+    ax.set_yticklabels(np.unique(all_labels))
+
+    plt.show()
+    plt.savefig(f"results/adult_{len(party_paritions)}p/confusion_matrix.png")
+
     return avg_loss, auprc
+
+
+def trainAndEvaulateEnsemble(party_paritions, train_dataloader, test_dataloader, layers, noise_scale, trained_with_noise=False, client_optimizers=None, fusion_optimizer=None, epochs=10):
+    """Train and evaluate the ensemble model based on the input parameters.
+    
+    Parameters:
+    -----------
+    party_paritions : list[int]
+        The number of features per party.
+    train_dataloader : DataLoader
+        The data loader that contains the training data.
+    test_dataloader : DataLoader
+        The data loader that contains the test data.
+    layers : int
+        The number of layers in the client models.
+    noise_scale : float
+        The scale of the noise to add to the dataloader.
+    trained_with_noise : bool
+        Whether the model was trained with noise.
+    client_optimizers : list[Optimizer]
+        The optimizers to use for training the client models.
+    fusion_optimizer : Optimizer
+        The optimizer to use for training the fusion model.
+    epochs : int
+        The number of epochs to train the model for.
+
+    Returns:
+    --------
+    x : None
+    """
+
+    ## define models
+    client_output_embedding_size = 32
+    client_models = helper.generateClientModels(party_paritions, client_output_embedding_size, layers)
+
+    fusion_model = helper.generateFusionModel(client_output_embedding_size * len(party_paritions))
+
+
+    # define optimizers and loss function
+    if(client_optimizers is None):
+        client_optimizers = [optim.Adam(model.parameters(), lr=0.001) for model in client_models]
+    if(fusion_optimizer is None):
+        fusion_optimizer = optim.SGD(fusion_model.parameters(), lr=0.001)
+    loss_fn = nn.BCEWithLogitsLoss()
+
+
+    ## Train the ensemble model without noise
+    training_params = {
+        "client_models": client_models,
+        "fusion_model": fusion_model,
+        "party_paritions": party_paritions,
+        "train_dataloader": train_dataloader,
+        "client_optimizers": client_optimizers,
+        "fusion_optimizer": fusion_optimizer,
+        "loss_fn": loss_fn,
+        "epochs": 10
+    }
+
+    losses, epo, auprc_values = helper.trainEnsemble(**training_params)
+
+    ## Evaluate the ensemble model
+    generateLossGraph(losses, epo, len(party_paritions), noise_scale, trained_with_noise)
+    generateAUPRCGraph(auprc_values, epo, len(party_paritions), noise_scale, trained_with_noise)
+
+    evaluation_params = {
+        "client_models": client_models,
+        "fusion_model": fusion_model,
+        "party_paritions": party_paritions,
+        "test_dataloader": test_dataloader,
+        "loss_fn": loss_fn,
+    }
+    evaulateEnsemble(**evaluation_params)
+
+
+
+def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0]):
+    """Generate the analysis based on the input parameters.
+
+    Parameters:
+    -----------
+    n_distinct_parties : int
+        The number of distinct parties in the dataset.
+    layers : int
+        The number of layers in the client models.
+
+    Returns:
+    --------
+    x : None
+        The results of the analysis.
+
+    Notes:
+    ------
+    the following directories must be created before running the function:
+    - datasets/pre_processed_adult_{n_distinct_parties}p
+    """
+
+    # dataset dir (must be generated by pre-processor for respective n_distinct_parties)
+    dataset_dir = f"datasets/pre_processed_adult_{n_distinct_parties}p"
+
+    # results dir (where to save the results)
+    results_dir = f"results/adult_{n_distinct_parties}p"
+
+    results_path = Path(results_dir)
+    results_path.mkdir(parents=True, exist_ok=True)
+
+    ## Import pre-processed Dataset
+    test_datframes = []
+    train_dataframes = []
+    for i in range(1, n_distinct_parties+1):
+        test_datframes.append(pd.read_csv(f"{dataset_dir}/test_data_party_{i}.csv", sep=',', header=0))
+        train_dataframes.append(pd.read_csv(f"{dataset_dir}/train_data_party_{i}.csv", sep=',', header=0))
+
+    test_y_dataframe = pd.read_csv(f"{dataset_dir}/test_labels.csv", sep=',', header=0)
+    train_y_dataframe = pd.read_csv(f"{dataset_dir}/train_labels.csv", sep=',', header=0)
+
+    # Convert DataFrames to Tensors
+    test_tensors = []
+    train_tensors = []
+    for i in range(n_distinct_parties):
+        test_tensors.append(torch.tensor(test_datframes[i].values, dtype=torch.float32))
+        train_tensors.append(torch.tensor(train_dataframes[i].values, dtype=torch.float32))
+
+    test_y = torch.tensor(test_y_dataframe.values, dtype=torch.float32)
+    train_y = torch.tensor(train_y_dataframe.values, dtype=torch.float32)
+
+    # identify feature->party parition:
+    party_paritions = [len(i.columns) for i in train_dataframes]
+
+
+
+    ## Create dataset/dataloader for party input (concatonate all parties for clean dataloader)
+    
+    test_y = torch.tensor(test_y_dataframe.values, dtype=torch.float32)
+    train_y = torch.tensor(train_y_dataframe.values, dtype=torch.float32)
+
+    
+    # Create dataset
+    train_dataset = TensorDataset(torch.cat(train_tensors, dim=1), train_y)
+    test_dataset = TensorDataset(torch.cat(test_tensors, dim=1), test_y)
+
+    # Create dataloader
+    train_dataloader_without_noise = DataLoader(train_dataset, batch_size=128, shuffle=False)
+    # test_dataloader_without_noise = DataLoader(test_dataset, batch_size=128, shuffle=False)
+
+    # Generate noisy dataloaders
+    noisy_train_dataloaders = []
+    noisy_test_dataloaders = []
+    for noise_scale in noise_scales:
+        noisy_train_dataloaders.append(generateNoisyDataloader(train_tensors, train_y, noise_scale=noise_scale))
+        noisy_test_dataloaders.append(generateNoisyDataloader(test_tensors, test_y, noise_scale=noise_scale))
+
+    
+    # Deploy the ensemble model with various noise scales
+    for i, noise_scale in enumerate(noise_scales):
+        print(f"Training Ensemble Model with Noise Scale: {noise_scale}")
+        noisy_train_dataloader = noisy_train_dataloaders[i]
+        noisy_test_dataloader = noisy_test_dataloaders[i]
+
+        train_and_evaluate_params = {
+            "party_paritions": party_paritions,
+            "train_dataloader": noisy_train_dataloader,
+            "test_dataloader": noisy_test_dataloader,
+            "layers": layers,
+            "noise_scale": noise_scale,
+            "trained_with_noise": True
+        }
+
+        ## train with noise:
+        trainAndEvaulateEnsemble(**train_and_evaluate_params)
+
+        # Deploy the ensemble model with no noise during training
+        train_and_evaluate_params["train_dataloader"] = train_dataloader_without_noise
+        trainAndEvaulateEnsemble(party_paritions, train_dataloader_without_noise, noisy_test_dataloader, layers=layers, noise_scale=noise_scale, trained_with_noise=False)
+
+
+
+    return None
+
+
+if __name__ == '__main__':
+
+    # n distinct parties 
+    n_distinct_parties = 5
+
+    # (n_distinct_parties, layers, noise_scales=[0.0])
+    helper.generateAnalysis(n_distinct_parties, 1, [0.0])

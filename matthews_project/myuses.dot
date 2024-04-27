@@ -1,0 +1,52 @@
+digraph G {
+    graph [rankdir=TB, clusterrank="local"];
+    subgraph cluster_G {
+
+        graph [style="filled,rounded",fillcolor="#80808018", label=""];
+        helper [label="helper", style="filled", fillcolor="#ffffffb2", fontcolor="#000000", group="0"];
+        vfl_robustness_analysis [label="vfl_robustness_analysis", style="filled", fillcolor="#ffffffb2", fontcolor="#000000", group="1"];
+        subgraph cluster_helper {
+
+            graph [style="filled,rounded",fillcolor="#80808018", label="helper"];
+            helper__ClientModel [label="ClientModel\n(helper.py:20)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__FusionModel [label="FusionModel\n(helper.py:51)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__evaulateEnsemble [label="evaulateEnsemble\n(helper.py:283)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__generateAUPRCGraph [label="generateAUPRCGraph\n(helper.py:252)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__generateAnalysis [label="generateAnalysis\n(helper.py:411)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__generateClientModels [label="generateClientModels\n(helper.py:63)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__generateFusionModel [label="generateFusionModel\n(helper.py:85)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__generateLossGraph [label="generateLossGraph\n(helper.py:221)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__generateNoisyDataloader [label="generateNoisyDataloader\n(helper.py:194)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__trainAndEvaulateEnsemble [label="trainAndEvaulateEnsemble\n(helper.py:338)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+            helper__trainEnsemble [label="trainEnsemble\n(helper.py:101)", style="filled", fillcolor="#feccccb2", fontcolor="#000000", group="0"];
+        }
+        subgraph cluster_helper__ClientModel {
+
+            graph [style="filled,rounded",fillcolor="#80808018", label="helper.ClientModel"];
+            helper__ClientModel____init__ [label="__init__\n(helper.py:21)", style="filled", fillcolor="#ff9999b2", fontcolor="#000000", group="0"];
+            helper__ClientModel__forward [label="forward\n(helper.py:37)", style="filled", fillcolor="#ff9999b2", fontcolor="#000000", group="0"];
+        }
+        subgraph cluster_helper__FusionModel {
+
+            graph [style="filled,rounded",fillcolor="#80808018", label="helper.FusionModel"];
+            helper__FusionModel____init__ [label="__init__\n(helper.py:52)", style="filled", fillcolor="#ff9999b2", fontcolor="#000000", group="0"];
+            helper__FusionModel__forward [label="forward\n(helper.py:57)", style="filled", fillcolor="#ff9999b2", fontcolor="#000000", group="0"];
+        }
+    }
+        helper -> helper [style="solid", color="#000000"];
+        helper -> helper__generateAnalysis [style="solid", color="#000000"];
+        helper__generateClientModels -> helper__ClientModel____init__ [style="solid", color="#000000"];
+        helper__generateClientModels -> helper__ClientModel [style="solid", color="#000000"];
+        helper__generateFusionModel -> helper__FusionModel [style="solid", color="#000000"];
+        helper__generateFusionModel -> helper__FusionModel____init__ [style="solid", color="#000000"];
+        helper__trainAndEvaulateEnsemble -> helper__trainEnsemble [style="solid", color="#000000"];
+        helper__trainAndEvaulateEnsemble -> helper__generateLossGraph [style="solid", color="#000000"];
+        helper__trainAndEvaulateEnsemble -> helper__generateClientModels [style="solid", color="#000000"];
+        helper__trainAndEvaulateEnsemble -> helper__generateAUPRCGraph [style="solid", color="#000000"];
+        helper__trainAndEvaulateEnsemble -> helper__evaulateEnsemble [style="solid", color="#000000"];
+        helper__trainAndEvaulateEnsemble -> helper__generateFusionModel [style="solid", color="#000000"];
+        helper__generateAnalysis -> helper__trainAndEvaulateEnsemble [style="solid", color="#000000"];
+        helper__generateAnalysis -> helper__generateNoisyDataloader [style="solid", color="#000000"];
+        vfl_robustness_analysis -> helper [style="solid", color="#000000"];
+        vfl_robustness_analysis -> helper__generateAnalysis [style="solid", color="#000000"];
+    }
