@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import average_precision_score
 from torch.utils.data import DataLoader, TensorDataset
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class ClientModel(nn.Module):
     def __init__(self, n_features, embeding_output_size, layers=1):
@@ -210,3 +212,56 @@ def generateNoisyDataloader(dataset_tensors, noise_scale=0.1, multi_tensors=True
 
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
     return dataloader
+
+
+def generateLossGraph(losses, epochs, noise_scale=0.1):
+    """Generate a loss graph based on the input losses and epochs.
+
+    Parameters:
+    -----------
+    losses : list[float]
+        A list of losses to plot.
+    epochs : list[int]
+        A list of epochs to plot.
+
+    Returns:
+    --------
+    x : None
+        A plot of the loss graph.
+    """
+    
+    f, ax = plt.subplots(1, 1, figsize=(10, 5))
+    sns.despine(ax=ax)
+    ax.plot(epochs, losses, marker='o', linestyle='-')
+    plt.title(f'Loss vs. Epoch (Noise Scale: {noise_scale})')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.show()
+    return f
+
+def generateAUPRCGraph(auprc_values, epochs, noise_scale=0.1):
+    """Generate an AUPRC graph based on the input AUPRC values and epochs.
+
+    Parameters:
+    -----------
+    auprc_values : list[float]
+        A list of AUPRC values to plot.
+    epochs : list[int]
+        A list of epochs to plot.
+
+    Returns:
+    --------
+    x : None
+        A plot of the AUPRC graph.
+    """
+    
+    f, ax = plt.subplots(1, 1, figsize=(10, 5))
+    sns.despine(ax=ax)
+    ax.plot(epochs, auprc_values, marker='o', linestyle='-')
+    plt.title(f'AUPRC vs. Epoch (Noise Scale: {noise_scale})')
+    plt.xlabel('Epoch')
+    plt.ylabel('AUPRC')
+    plt.grid(True)
+    plt.show()
+    return f
