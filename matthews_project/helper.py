@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 from sklearn.metrics import average_precision_score
+from torch.utils.data import DataLoader, TensorDataset
 
 class ClientModel(nn.Module):
     def __init__(self, n_features, embeding_output_size, layers=1):
@@ -175,3 +176,37 @@ def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader
         print(f"Epoch {epoch + 1} - Loss: {avg_loss}, AUPRC: {auprc}")
     
     return (losses, epo, auprc_values)
+
+
+def generateNoisyDataloader(dataset_tensors, noise_scale=0.1, multi_tensors=True, batch_size=32, shuffle=True):
+    """Generate a noisy dataloader based on the input dataset tensors.
+
+    Parameters:
+    -----------
+    dataset_tensors : list[Tensor]
+        A list of tensors that represent the dataset.
+    noise_scale : float
+        The scale of the noise to add to the dataset.
+    batch_size : int
+        The batch size of the dataloader.
+    shuffle : bool
+        Whether to shuffle the dataloader.
+    
+    Returns:
+    --------
+    x : DataLoader
+        A dataloader containing the noisy dataset.
+    """
+
+    if(multi_tensors):
+        noisy_tensors = []
+        for tensor in dataset_tensors:
+            noisy_tensor = tensor + noise_scale * torch.randn_like(tensor)
+            noisy_tensors.append(noisy_tensor)
+        dataset = TensorDataset(*noisy_tensors)
+    else:
+        noisy_tensor = dataset_tensors + noise_scale * torch.randn_like(dataset_tensors)
+        dataset = TensorDataset(noisy_tensor)
+
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    return dataloader
