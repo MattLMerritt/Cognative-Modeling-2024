@@ -665,17 +665,13 @@ if __name__ == '__main__':
     analysis_params = {
         "n_distinct_parties": 3,
         "layers": 1,
-        "noise_scales": [0.5, 1],
+        "noise_scales": [0.01, 0.1, 0.3, 0.5, 1, 2, 5],
         "training_epochs": 10,
         "batch_size": 32,
     }
     helper.generateAnalysis(**analysis_params)
 
     # 5 party data partition
-    analysis_params["n_distinct_parties"] = 5
-    helper.generateAnalysis(**analysis_params)
-
-    # 10 party data partition
-    analysis_params["n_distinct_parties"] = 10
+    analysis_params["n_distinct_parties"] = 7
     helper.generateAnalysis(**analysis_params)
 
