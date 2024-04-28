@@ -20,7 +20,7 @@ from sklearn.metrics import confusion_matrix
 
 class ClientModel(nn.Module):
     def __init__(self, n_features, embeding_output_size, layers=1):
-        super(ClientModel, self).__init__()
+        super(ClientModel, self).__init__() 
 
         # input layer
         self.fc1 = nn.Linear(n_features,  128)
@@ -99,7 +99,7 @@ def generateFusionModel(n_embeding_components):
     return FusionModel(n_embeding_components)
 
 
-def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader, client_optimizers=None, fusion_optimizer=None, loss_fn=nn.BCEWithLogitsLoss(), epochs=10):
+def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader, test_dataloader, client_optimizers=None, fusion_optimizer=None, loss_fn=nn.BCEWithLogitsLoss(), epochs=10):
     """Train the clients and fusion model without adding noise to dataloader.
 
     Parameters:
@@ -134,12 +134,9 @@ def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader
     if(fusion_optimizer is None):
         fusion_optimizer = torch.optim.Adam(fusion_model.parameters(), lr=0.001)
 
-    losses = []
+    training_losses = []
     epo = []
-    auprc_values = []
-
-    epochs = 10
-
+    training_auprc_values = []
 
     # Training Loop
     for epoch in range(epochs):
@@ -183,13 +180,23 @@ def trainEnsemble(client_models, fusion_model, party_paritions, train_dataloader
         avg_loss = total_loss / len(train_dataloader)
         auprc = average_precision_score(all_labels, all_predictions)
         
-        losses.append(avg_loss)
+        training_losses.append(avg_loss)
         epo.append(epoch + 1)  # Add 1 to start epoch counting from 1
-        auprc_values.append(auprc)  # Store AUPRC value
+        training_auprc_values.append(auprc)  # Store AUPRC value
 
-        print(f"Epoch {epoch + 1} - Loss: {avg_loss}, AUPRC: {auprc}")
-    
-    return (losses, epo, auprc_values)
+        print(f"Epoch {epoch + 1} - Training Loss: {avg_loss}, AUPRC: {auprc}")
+
+        # Metrics over test set
+        evaluation_params = {
+        "client_models": client_models,
+        "fusion_model": fusion_model,
+        "party_paritions": party_paritions,
+        "test_dataloader": test_dataloader,
+        "loss_fn": loss_fn,
+    }
+        test_loss, test_auprc = evaulateEnsemble(**evaluation_params)
+
+    return (training_losses, epo, training_auprc_values)
 
 
 def generateNoisyDataloader(dataset_tensors, label_tensor, noise_scale=0.1, batch_size=32, shuffle=True):
@@ -250,6 +257,7 @@ def generateLossGraph(losses, epochs, n_distinct_parties, noise_scale=0.1, train
     plt.show()
     return f
 
+
 def generateAUPRCGraph(auprc_values, epochs, n_distinct_parties, noise_scale=0.1, trained_with_noise=False):
     """Generate an AUPRC graph based on the input AUPRC values and epochs.
 
@@ -281,7 +289,92 @@ def generateAUPRCGraph(auprc_values, epochs, n_distinct_parties, noise_scale=0.1
     plt.show()
     return f
 
-def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataloader, loss_fn=nn.BCELoss()):
+
+def generateTotalLossMetricsGraph(losses, epochs, n_distinct_parties, noise_scale, hasMultipleNoises=False):
+    """Generate a total loss graph based on the input losses and epochs.
+
+    Parameters:
+    -----------
+    losses : dict[str](list[float])
+        A dictionary of list of losses to plot, the strinf is the label.
+    epochs : dict[str](list[float])
+        A list of epochs to plot.
+    n_distinct_parties : int
+        The number of distinct parties in the dataset.
+    trained_with_noise : bool
+        Whether the model was trained with noise.
+    hasMultipleNoises : bool
+        Whether the aurpc spans multiple noise scales.
+
+    Returns:
+    --------
+    x : Figure
+        A plot of the loss graph.
+    """
+    
+    f, ax = plt.subplots(1, 1, figsize=(10, 5))
+    sns.despine(ax=ax)
+    for label in losses.keys():
+        ax.plot(epochs, losses[label], marker='o', linestyle='-', label=label)
+    
+    if(hasMultipleNoises):
+        plt.title(f'Loss vs. Epoch Over Multiple Noise Scales')
+    else:
+        plt.title(f'Loss vs. Epoch Over {noise_scale} Noise Scale')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.legend()
+    if(hasMultipleNoises):
+        plt.savefig(f"results/adult_{n_distinct_parties}p/total_loss_over_multiple_noises.png")
+    else:
+        plt.savefig(f"results/adult_{n_distinct_parties}p/total_loss_over_{noise_scale}_noise_scale.png")
+    plt.show()
+    return f
+
+
+def generateTotalAuprcMetricsGraph(aurpc, epochs, n_distinct_parties, noise_scale, hasMultipleNoises=False):
+    """Generate a total loss graph based on the input losses and epochs.
+
+    Parameters:
+    -----------
+    auprc : dict[str](list[float])
+        A dictionary of list of losses to plot, the strinf is the label.
+    epochs : dict[str](list[float])
+        A list of epochs to plot.
+    n_distinct_parties : int
+        The number of distinct parties in the dataset.
+    trained_with_noise : bool
+        Whether the model was trained with noise.
+    hasMultipleNoises : bool
+        Whether the aurpc spans multiple noise scales.
+
+    Returns:
+    --------
+    f : Figure
+        A plot of the loss graph.
+    """
+    
+    f, ax = plt.subplots(1, 1, figsize=(10, 5))
+    sns.despine(ax=ax)
+    for label in aurpc.keys():
+        ax.plot(epochs, aurpc[label], marker='o', linestyle='-', label=label)
+    if(hasMultipleNoises):
+        plt.title(f'AUPRC vs. Epoch Over Multiple Noise Scales')
+    else:
+        plt.title(f'AUPRC vs. Epoch Over {noise_scale} Noise Scale')
+    plt.xlabel('Epoch')
+    plt.ylabel('AUPRC')
+    plt.grid(True)
+    plt.legend()
+    if(hasMultipleNoises):
+        plt.savefig(f"results/adult_{n_distinct_parties}p/total_auprc_over_multiple_noises.png")
+    else:
+        plt.savefig(f"results/adult_{n_distinct_parties}p/total_auprc_over_{noise_scale}_noise_scale.png")
+    plt.show()
+    return f
+
+def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataloader, generate_confusion=False, loss_fn=nn.BCELoss()):
     """Evaluate the model based on the input test dataloader.
 
     Parameters:
@@ -299,8 +392,10 @@ def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataload
 
     Returns:
     --------
-    x : float
+    avg_loss : float
         The average loss over the test data.
+    auprc : float
+        The AUPRC score over the test data.
     """
 
     threshold = 0.5
@@ -338,29 +433,30 @@ def evaulateEnsemble(client_models, fusion_model, party_paritions, test_dataload
     
     print(f"Loss: {avg_loss}, AUPRC: {auprc}")
 
-    # generate the confusion matrix
-    conf_matrix = confusion_matrix(all_labels, all_test_binary_predictions)
+    if(generate_confusion):
+        # generate the confusion matrix
+        conf_matrix = confusion_matrix(all_labels, all_test_binary_predictions)
 
-    # Plotting the confusion matrix using matplotlib
-    fig, ax = plt.subplots()
-    cax = ax.matshow(conf_matrix, cmap=plt.cm.Blues)
-    fig.colorbar(cax)
+        # Plotting the confusion matrix using matplotlib
+        fig, ax = plt.subplots()
+        cax = ax.matshow(conf_matrix, cmap=plt.cm.Blues)
+        fig.colorbar(cax)
 
-    for (i, j), val in np.ndenumerate(conf_matrix):
-        ax.text(j, i, f'{val}', ha='center', va='center', color='red')
+        for (i, j), val in np.ndenumerate(conf_matrix):
+            ax.text(j, i, f'{val}', ha='center', va='center', color='red')
 
-    ax.set_title('Confusion Matrix')
-    ax.set_xlabel('Predicted')
-    ax.set_ylabel('Actual')
+        ax.set_title('Confusion Matrix')
+        ax.set_xlabel('Predicted')
+        ax.set_ylabel('Actual')
 
-    # Adjust the ticks to show the corresponding labels
-    ax.set_xticks(range(len(np.unique(all_labels))))
-    ax.set_yticks(range(len(np.unique(all_labels))))
-    ax.set_xticklabels(np.unique(all_labels))
-    ax.set_yticklabels(np.unique(all_labels))
+        # Adjust the ticks to show the corresponding labels
+        ax.set_xticks(range(len(np.unique(all_labels))))
+        ax.set_yticks(range(len(np.unique(all_labels))))
+        ax.set_xticklabels(np.unique(all_labels))
+        ax.set_yticklabels(np.unique(all_labels))
 
-    plt.show()
-    plt.savefig(f"results/adult_{len(party_paritions)}p/confusion_matrix.png")
+        plt.savefig(f"results/adult_{len(party_paritions)}p/confusion_matrix.png")
+        plt.show()
 
     return avg_loss, auprc
 
@@ -391,11 +487,12 @@ def trainAndEvaulateEnsemble(party_paritions, train_dataloader, test_dataloader,
 
     Returns:
     --------
-    x : None
+    x : tuple
+        A tuple containing the losses, epochs, and AUPRC values.
     """
 
     ## define models
-    client_output_embedding_size = 32
+    client_output_embedding_size = 16
     client_models = helper.generateClientModels(party_paritions, client_output_embedding_size, layers)
 
     fusion_model = helper.generateFusionModel(client_output_embedding_size * len(party_paritions))
@@ -415,10 +512,11 @@ def trainAndEvaulateEnsemble(party_paritions, train_dataloader, test_dataloader,
         "fusion_model": fusion_model,
         "party_paritions": party_paritions,
         "train_dataloader": train_dataloader,
+        "test_dataloader": test_dataloader,
         "client_optimizers": client_optimizers,
         "fusion_optimizer": fusion_optimizer,
         "loss_fn": loss_fn,
-        "epochs": 10
+        "epochs": epochs
     }
 
     losses, epo, auprc_values = helper.trainEnsemble(**training_params)
@@ -427,18 +525,11 @@ def trainAndEvaulateEnsemble(party_paritions, train_dataloader, test_dataloader,
     generateLossGraph(losses, epo, len(party_paritions), noise_scale, trained_with_noise)
     generateAUPRCGraph(auprc_values, epo, len(party_paritions), noise_scale, trained_with_noise)
 
-    evaluation_params = {
-        "client_models": client_models,
-        "fusion_model": fusion_model,
-        "party_paritions": party_paritions,
-        "test_dataloader": test_dataloader,
-        "loss_fn": loss_fn,
-    }
-    evaulateEnsemble(**evaluation_params)
+    return (losses, epo, auprc_values)
 
 
 
-def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0]):
+def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0], training_epochs=10, batch_size=32, shuffle=True):
     """Generate the analysis based on the input parameters.
 
     Parameters:
@@ -491,31 +582,36 @@ def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0]):
     # identify feature->party parition:
     party_paritions = [len(i.columns) for i in train_dataframes]
 
-
-
     ## Create dataset/dataloader for party input (concatonate all parties for clean dataloader)
-    
     test_y = torch.tensor(test_y_dataframe.values, dtype=torch.float32)
     train_y = torch.tensor(train_y_dataframe.values, dtype=torch.float32)
 
-    
     # Create dataset
     train_dataset = TensorDataset(torch.cat(train_tensors, dim=1), train_y)
     test_dataset = TensorDataset(torch.cat(test_tensors, dim=1), test_y)
 
     # Create dataloader
-    train_dataloader_without_noise = DataLoader(train_dataset, batch_size=128, shuffle=False)
+    train_dataloader_without_noise = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
     # test_dataloader_without_noise = DataLoader(test_dataset, batch_size=128, shuffle=False)
 
     # Generate noisy dataloaders
+    noisy_dataloader_params = {
+        "dataset_tensors": train_tensors,
+        "label_tensor": train_y,
+        "noise_scale": noise_scales[0],
+        "batch_size": batch_size,
+        "shuffle": shuffle
+    }
     noisy_train_dataloaders = []
     noisy_test_dataloaders = []
     for noise_scale in noise_scales:
-        noisy_train_dataloaders.append(generateNoisyDataloader(train_tensors, train_y, noise_scale=noise_scale))
-        noisy_test_dataloaders.append(generateNoisyDataloader(test_tensors, test_y, noise_scale=noise_scale))
-
+        noisy_dataloader_params["noise_scale"] = noise_scale
+        noisy_train_dataloaders.append(generateNoisyDataloader(**noisy_dataloader_params))
+        noisy_test_dataloaders.append(generateNoisyDataloader(**noisy_dataloader_params))
     
     # Deploy the ensemble model with various noise scales
+    all_noise_loss = dict()
+    all_noise_auprc = dict()
     for i, noise_scale in enumerate(noise_scales):
         print(f"Training Ensemble Model with Noise Scale: {noise_scale}")
         noisy_train_dataloader = noisy_train_dataloaders[i]
@@ -527,16 +623,37 @@ def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0]):
             "test_dataloader": noisy_test_dataloader,
             "layers": layers,
             "noise_scale": noise_scale,
-            "trained_with_noise": True
+            "trained_with_noise": True,
+            "epochs": training_epochs
         }
 
+        local_noise_loss = dict()
+        local_noise_auprc = dict()
+
         ## train with noise:
-        trainAndEvaulateEnsemble(**train_and_evaluate_params)
+        losses, epo, auprc_values = trainAndEvaulateEnsemble(**train_and_evaluate_params)
+        local_noise_loss[f"noise={noise_scale} nt"] = losses
+        local_noise_auprc[f"noise={noise_scale} nt"] = auprc_values
 
         # Deploy the ensemble model with no noise during training
         train_and_evaluate_params["train_dataloader"] = train_dataloader_without_noise
-        trainAndEvaulateEnsemble(party_paritions, train_dataloader_without_noise, noisy_test_dataloader, layers=layers, noise_scale=noise_scale, trained_with_noise=False)
+        losses, epo, auprc_values = trainAndEvaulateEnsemble(**train_and_evaluate_params)
+        local_noise_loss[f"noise={noise_scale} wnt"] = losses
+        local_noise_auprc[f"noise={noise_scale} wnt"] = auprc_values
 
+
+        # generate loss & auprc graph for current noises loss
+        print("About to run: generateTotalLossMetricsGraph")
+        generateTotalLossMetricsGraph(local_noise_loss, epo, len(party_paritions), noise_scale)
+        generateTotalAuprcMetricsGraph(all_noise_auprc, epo, len(party_paritions), noise_scale)
+        
+        # add local loss and auprc values to global
+        all_noise_loss.update(local_noise_loss)
+        all_noise_auprc.update(local_noise_auprc)
+
+    # generate total loss graph
+    generateTotalLossMetricsGraph(all_noise_loss, epo, len(party_paritions), None, True)
+    generateTotalAuprcMetricsGraph(all_noise_auprc, epo, len(party_paritions), None, True)
 
 
     return None
@@ -544,8 +661,21 @@ def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0]):
 
 if __name__ == '__main__':
 
-    # n distinct parties 
-    n_distinct_parties = 5
+    # 3 party data partition
+    analysis_params = {
+        "n_distinct_parties": 3,
+        "layers": 1,
+        "noise_scales": [0.5, 1],
+        "training_epochs": 10,
+        "batch_size": 32,
+    }
+    helper.generateAnalysis(**analysis_params)
 
-    # (n_distinct_parties, layers, noise_scales=[0.0])
-    helper.generateAnalysis(n_distinct_parties, 1, [0.0])
+    # 5 party data partition
+    analysis_params["n_distinct_parties"] = 5
+    helper.generateAnalysis(**analysis_params)
+
+    # 10 party data partition
+    analysis_params["n_distinct_parties"] = 10
+    helper.generateAnalysis(**analysis_params)
+
