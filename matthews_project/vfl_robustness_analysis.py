@@ -10,7 +10,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.metrics import average_precision_score, accuracy_score
-import helper
 
 # Libraries for Data Visulation Tools
 import matplotlib.pyplot as plt
@@ -493,9 +492,9 @@ def trainAndEvaulateEnsemble(party_paritions, train_dataloader, test_dataloader,
 
     ## define models
     client_output_embedding_size = 16
-    client_models = helper.generateClientModels(party_paritions, client_output_embedding_size, layers)
+    client_models = generateClientModels(party_paritions, client_output_embedding_size, layers)
 
-    fusion_model = helper.generateFusionModel(client_output_embedding_size * len(party_paritions))
+    fusion_model = generateFusionModel(client_output_embedding_size * len(party_paritions))
 
 
     # define optimizers and loss function
@@ -519,7 +518,7 @@ def trainAndEvaulateEnsemble(party_paritions, train_dataloader, test_dataloader,
         "epochs": epochs
     }
 
-    losses, epo, auprc_values = helper.trainEnsemble(**training_params)
+    losses, epo, auprc_values = trainEnsemble(**training_params)
 
     ## Evaluate the ensemble model
     generateLossGraph(losses, epo, len(party_paritions), noise_scale, trained_with_noise)
@@ -660,6 +659,7 @@ def generateAnalysis(n_distinct_parties, layers, noise_scales=[0.0], training_ep
 
 
 if __name__ == '__main__':
+    print('running analysis for adult dataset')
 
     # 3 party data partition
     analysis_params = {
@@ -669,9 +669,11 @@ if __name__ == '__main__':
         "training_epochs": 10,
         "batch_size": 32,
     }
-    helper.generateAnalysis(**analysis_params)
+    generateAnalysis(**analysis_params)
+    print('completed analsis for 3 party data partition')
 
-    # 5 party data partition
+    # 7 party data partition
     analysis_params["n_distinct_parties"] = 7
-    helper.generateAnalysis(**analysis_params)
+    generateAnalysis(**analysis_params)
+    print('completed analsis for 7 party data partition')
 
